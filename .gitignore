@@ -1,0 +1,13 @@
+TAGS
+.vs/
+.vscode/
+.build/
+build/
+vendor/bgfx/bgfx/examples/runtime/
+logs/
+Unreal/Hedge/Intermediate/
+Unreal/Hedge/Binaries/
+Unreal/Hedge/Saved/
+Unreal/Hedge/.vs/
+/bazel-*/
+compile_commands.json
