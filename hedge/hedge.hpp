@@ -175,6 +175,14 @@ public:
     return _kernel != nullptr && (bool)_index && element() != nullptr;
   }
 
+  bool operator==(element_fn_t const& other) const {
+    return _index.offset == other._index.offset && _index.generation == other._index.generation;
+  }
+
+  bool operator!=(element_fn_t const& other) const {
+    return !(*this==other);
+  }
+
   TElement* element() const {
     if (_kernel != nullptr) {
       return _kernel->get(_index);

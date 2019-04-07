@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 
+#include <Eigen/Geometry>
 #include <easylogging++.h>
 
 
@@ -505,9 +506,28 @@ edge_fn_t face_fn_t::edge() const {
   MAKE_EDGE_FN(elem->edge_index)
 }
 
-// TODO
+float calc_area(point_t const* p0, point_t const* p1, point_t const* p2) {
+  auto A = p1->position - p0->position;
+  auto B = p2->position - p0->position;
+  return A.cross(B).norm() / 2.0f;
+}
+
+vertex_fn_t next_vert(vertex_fn_t const& vert) {
+  return vert.edge().next().vertex();
+}
+
+// TODO: tests
 float face_fn_t::area() const {
-  return 0.f;
+  auto area = 0.0f;
+  auto v0 = edge().vertex();
+  auto v1 = next_vert(v0);
+  auto v2 = next_vert(v1);
+  while(v2 != v0) {
+    area += calc_area(v0.point(), v1.point(), v2.point());
+    v1 = v2;
+    v2 = next_vert(v1);
+  }
+  return area;
 }
 
 // face_fn_t
