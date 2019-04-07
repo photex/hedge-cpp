@@ -14,6 +14,8 @@ namespace hedge {
    Rather than create a bunch of preprocessor macros to prevent copypasta I decided
    to create a simple templated wrapper over std::vector which implements the
    requirements for element storage.
+
+   This is used by `basic_kernel_t`. 
  */
 template<typename TElement, typename TElementIndex>
 class element_vector_t {
@@ -23,7 +25,7 @@ public:
     std::priority_queue<
       TElementIndex,
       std::vector<TElementIndex>,
-      std::greater<TElementIndex>
+      std::greater<>
     >;
 
   element_vector_t() {
@@ -284,11 +286,13 @@ edge_index_t edge_loop_builder_t::close()  {
 ///////////////////////////////////////////////////////////////////////////////
 
 mesh_t::mesh_t()
-  : kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
+  : tag(0)
+  , kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
 {}
 
 mesh_t::mesh_t(kernel_t::ptr_t&& _kernel)
-  : kernel(std::move(kernel))
+  : tag(0)
+  , kernel(std::move(_kernel))
 {}
 
 size_t mesh_t::point_count() const {
@@ -419,7 +423,7 @@ point_t::point_t(float x, float y, float z)
 
 point_t::point_t()
   : element_t()
-  , position(0.f)
+  , position(0.0f, 0.0f, 0.0f)
 {}
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -501,6 +505,7 @@ edge_fn_t face_fn_t::edge() const {
   MAKE_EDGE_FN(elem->edge_index)
 }
 
+// TODO
 float face_fn_t::area() const {
   return 0.f;
 }

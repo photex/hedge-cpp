@@ -2,7 +2,7 @@
 #pragma once
 
 #include <memory>
-#include <mathfu/glsl_mappings.h>
+#include <Eigen/Core>
 
 namespace hedge {
 
@@ -14,8 +14,8 @@ struct point_t; struct point_index_t;
 class kernel_t;
 class mesh_t;
 
-using position_t = mathfu::vec3;
-using color_t = mathfu::vec4;
+using position_t = Eigen::Vector3f;
+using color_t = Eigen::Vector4f;
 using offset_t = size_t;
 using generation_t = size_t;
 
@@ -124,7 +124,7 @@ enum class element_status_t : uint16_t {
 struct element_t {
   element_status_t status;
   uint16_t tag;
-  uint32_t generation;
+  generation_t generation;
   element_t();
 };
 
@@ -146,7 +146,7 @@ struct vertex_t : element_t {
 };
 
 struct point_t : element_t {
-  mathfu::vec3 position;
+  position_t position;
 
   point_t();
   point_t(float x, float y, float z);
@@ -167,7 +167,8 @@ protected:
   TIndex _index;
 public:
   explicit element_fn_t(kernel_t* kernel, TIndex index)
-    : _kernel(kernel), _index(index)
+    : _kernel(kernel)
+    , _index(index)
   {}
 
   explicit operator bool() const noexcept {
@@ -226,7 +227,7 @@ public:
 class mesh_modifier_t {
 protected:
   mesh_t& _mesh;
-  mesh_modifier_t(mesh_t& mesh);
+  explicit mesh_modifier_t(mesh_t& mesh);
 
   vertex_index_t make_vertex(point_index_t pindex);
   void update_vertex(vertex_index_t vindex, edge_index_t eindex);
@@ -260,7 +261,7 @@ class mesh_t {
   uint16_t tag;
 public:
   mesh_t();
-  mesh_t(kernel_t::ptr_t&&);
+  explicit mesh_t(kernel_t::ptr_t&&);
 
   size_t point_count() const;
   size_t vertex_count() const;
