@@ -133,17 +133,37 @@ public:
     return points.get(index);
   }
 
-  edge_index_t emplace(edge_t&& edge) override {
+  edge_index_t insert(edge_t edge) override {
+    LOG(WARNING) << "UNIMPLEMENTED";
     return edges.emplace(std::move(edge));
   }
-  face_index_t emplace(face_t&& face) override {
+
+  face_index_t insert(face_t face) override {
+    LOG(WARNING) << "UNIMPLEMENTED";
     return faces.emplace(std::move(face));
   }
-  vertex_index_t emplace(vertex_t&& vertex) override {
+
+  vertex_index_t insert(vertex_t vertex) override {
+    LOG(WARNING) << "UNIMPLEMENTED";
     return vertices.emplace(std::move(vertex));
   }
-  point_index_t emplace(point_t&& point) override {
+
+  point_index_t insert(point_t point) override {
+    LOG(WARNING) << "UNIMPLEMENTED";
     return points.emplace(std::move(point));
+  }
+
+  edge_index_t emplace(edge_t&& edge) override {
+    return edges.emplace(std::forward<edge_t>(edge));
+  }
+  face_index_t emplace(face_t&& face) override {
+    return faces.emplace(std::forward<face_t>(face));
+  }
+  vertex_index_t emplace(vertex_t&& vertex) override {
+    return vertices.emplace(std::forward<vertex_t>(vertex));
+  }
+  point_index_t emplace(point_t&& point) override {
+    return points.emplace(std::forward<point_t>(point));
   }
 
   void remove(edge_index_t index) override {
@@ -205,7 +225,7 @@ mesh_modifier_t::mesh_modifier_t(mesh_t& mesh)
 vertex_index_t mesh_modifier_t::make_vertex(point_index_t pindex) {
   vertex_t vert;
   vert.point_index = pindex;
-  return _mesh.kernel->emplace(std::move(vert));
+  return _mesh.kernel->insert(vert);
 }
 
 void mesh_modifier_t::update_vertex(vertex_index_t vindex, edge_index_t eindex) {
@@ -218,17 +238,17 @@ void mesh_modifier_t::update_vertex(vertex_index_t vindex, edge_index_t eindex) 
 edge_index_t mesh_modifier_t::make_edge(vertex_index_t vindex) {
   edge_t edge;
   edge.vertex_index = vindex;
-  auto eindex = _mesh.kernel->emplace(std::move(edge));
+  auto eindex = _mesh.kernel->insert(edge);
   update_vertex(vindex, eindex);
   return eindex;
 }
 
-edge_index_t mesh_modifier_t::make_edge(vertex_index_t vindex, edge_index_t prev_index) {
+edge_index_t mesh_modifier_t::make_edge(vertex_index_t vindex, edge_index_t prev_eindex) {
   edge_t edge;
   edge.vertex_index = vindex;
-  edge.prev_index = prev_index;
-  auto eindex = _mesh.kernel->emplace(std::move(edge));
-  set_next_edge(prev_index, eindex);
+  edge.prev_index = prev_eindex;
+  auto eindex = _mesh.kernel->insert(edge);
+  set_next_edge(prev_eindex, eindex);
   return eindex;
 }
 
@@ -237,14 +257,14 @@ void mesh_modifier_t::connect_edges(edge_index_t prev_eindex, edge_index_t next_
   set_next_edge(prev_eindex, next_eindex);
 }
 
-void mesh_modifier_t::set_next_edge(edge_index_t prev_index, edge_index_t next_index) {
-  auto* prev = _mesh.kernel->get(prev_index);
-  prev->next_index = next_index;
+void mesh_modifier_t::set_next_edge(edge_index_t prev_eindex, edge_index_t next_eindex) {
+  auto* prev = _mesh.kernel->get(prev_eindex);
+  prev->next_index = next_eindex;
 }
 
-void mesh_modifier_t::set_prev_edge(edge_index_t prev_index, edge_index_t next_index) {
-  auto* next = _mesh.kernel->get(next_index);
-  next->prev_index = prev_index;
+void mesh_modifier_t::set_prev_edge(edge_index_t prev_eindex, edge_index_t next_eindex) {
+  auto* next = _mesh.kernel->get(next_eindex);
+  next->prev_index = prev_eindex;
 }
 
 // mesh_modifier_t
@@ -350,15 +370,15 @@ edge_index_t mesh_t::add_edge(point_index_t pindex0, point_index_t pindex1) {
   v0.point_index = pindex0;
   v1.point_index = pindex1;
 
-  auto vindex0 = kernel->emplace(std::move(v0));
-  auto vindex1 = kernel->emplace(std::move(v1));
+  auto vindex0 = kernel->insert(v0);
+  auto vindex1 = kernel->insert(v1);
 
   edge_t e0, e1;
   e0.vertex_index = vindex0;
   e1.vertex_index = vindex1;
 
-  auto eindex0 = kernel->emplace(std::move(e0));
-  auto eindex1 = kernel->emplace(std::move(e1));
+  auto eindex0 = kernel->insert(e0);
+  auto eindex1 = kernel->insert(e1);
 
   kernel->get(vindex0)->edge_index = eindex0;
   kernel->get(vindex1)->edge_index = eindex1;
@@ -395,7 +415,7 @@ face_index_t mesh_t::add_face(edge_index_t root_eindex) {
 
   face_t face;
   face.edge_index = root_eindex;
-  auto findex = kernel->emplace(std::move(face));
+  auto findex = kernel->insert(face);
 
   auto* elem = kernel->get(root_eindex);
   while( elem && elem->tag != tag ) {
@@ -512,20 +532,16 @@ float calc_area(point_t const* p0, point_t const* p1, point_t const* p2) {
   return A.cross(B).norm() / 2.0f;
 }
 
-vertex_fn_t next_vert(vertex_fn_t const& vert) {
-  return vert.edge().next().vertex();
-}
-
 // TODO: tests
 float face_fn_t::area() const {
   auto area = 0.0f;
   auto v0 = edge().vertex();
-  auto v1 = next_vert(v0);
-  auto v2 = next_vert(v1);
+  auto v1 = v0.edge().next().vertex();
+  auto v2 = v1.edge().next().vertex();
   while(v2 != v0) {
     area += calc_area(v0.point(), v1.point(), v2.point());
     v1 = v2;
-    v2 = next_vert(v1);
+    v2 = v1.edge().next().vertex();
   }
   return area;
 }

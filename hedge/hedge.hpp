@@ -92,6 +92,11 @@ public:
   virtual vertex_t* get(vertex_index_t index) = 0;
   virtual point_t* get(point_index_t index) = 0;
 
+  virtual edge_index_t insert(edge_t edge) = 0;
+  virtual face_index_t insert(face_t face) = 0;
+  virtual vertex_index_t insert(vertex_t vertex) = 0;
+  virtual point_index_t insert(point_t point) = 0;
+
   virtual edge_index_t emplace(edge_t&& edge) = 0;
   virtual face_index_t emplace(face_t&& face) = 0;
   virtual vertex_index_t emplace(vertex_t&& vertex) = 0;
@@ -145,6 +150,7 @@ struct vertex_t : element_t {
   edge_index_t edge_index;
 };
 
+// TODO: how can we make point attributes configurable
 struct point_t : element_t {
   position_t position;
 
@@ -176,11 +182,11 @@ public:
   }
 
   bool operator==(element_fn_t const& other) const {
-    return _index.offset == other._index.offset && _index.generation == other._index.generation;
+    return _index == other._index;
   }
 
   bool operator!=(element_fn_t const& other) const {
-    return !(*this==other);
+    return _index != other._index;
   }
 
   TElement* element() const {
@@ -287,7 +293,7 @@ public:
   std::pair<point_t*, point_t*> points(edge_index_t eindex) const;
 
   point_index_t add_point(float x, float y, float z);
-  edge_index_t add_edge(point_index_t p0, point_index_t p1);
+  edge_index_t add_edge(point_index_t pindex0, point_index_t pindex1);
 
   face_index_t add_triangle(point_t p0, point_t p1, point_t p2);
   face_index_t add_triangle(point_index_t pindex0, point_index_t pindex1, point_index_t pindex3);
