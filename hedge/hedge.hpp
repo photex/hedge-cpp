@@ -111,11 +111,6 @@ public:
   virtual size_t vertex_count() const = 0;
   virtual size_t face_count() const = 0;
   virtual size_t edge_count() const = 0;
-
-  virtual void resolve(edge_index_t* index, edge_t** edge) const = 0;
-  virtual void resolve(face_index_t* index, face_t** face) const = 0;
-  virtual void resolve(point_index_t* index, point_t** point) const = 0;
-  virtual void resolve(vertex_index_t* index, vertex_t** vertex) const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,10 +122,9 @@ enum class element_status_t : uint16_t {
 };
 
 struct element_t {
-  element_status_t status;
-  uint16_t tag;
-  generation_t generation;
-  element_t();
+  element_status_t status = element_status_t::active;
+  uint16_t tag = 0;
+  generation_t generation = 1; // Using 1 as default to allow indexes with gen 0 to have another meaning.
 };
 
 struct edge_t : element_t {
@@ -286,7 +280,6 @@ public:
   face_fn_t face(face_index_t index) const;
   vertex_fn_t vertex(vertex_index_t index) const;
 
-  point_t* point(offset_t offset) const;
   point_t* point(point_index_t pindex) const;
   point_t* point(vertex_index_t vindex) const;
 

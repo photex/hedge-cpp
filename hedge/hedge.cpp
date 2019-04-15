@@ -43,7 +43,7 @@ public:
 
   TElement* get(TElementIndex index) const {
     TElement* element = get(index.offset);
-    if (element != nullptr) {
+    if (element != nullptr && index.generation != 0) {
       if (element->generation != index.generation) {
         LOG(WARNING) << "Generation mismatch for element: " << index.offset << ", " << index.generation;
         LOG(DEBUG) << "Offset: " << index.offset
@@ -68,7 +68,7 @@ public:
 
   TElementIndex emplace(TElement&& element) {
     TElementIndex index;
-    if (free_cells.size()) {
+    if (!free_cells.empty()) {
       index = free_cells.top();
       free_cells.pop();
       element.generation = index.generation;
@@ -78,7 +78,7 @@ public:
     else {
       index.offset = collection.size();
       index.generation = element.generation;
-      collection.emplace_back(std::move(element));
+      collection.emplace_back(std::forward<TElement>(element));
     }
     return index;
   }
@@ -93,6 +93,7 @@ public:
     }
   }
 
+  // TODO: tests
   void swap(TElementIndex aindex, TElementIndex bindex) {
     auto* element_a = get(aindex);
     auto* element_b = get(bindex);
@@ -134,22 +135,18 @@ public:
   }
 
   edge_index_t insert(edge_t edge) override {
-    LOG(WARNING) << "UNIMPLEMENTED";
     return edges.emplace(std::move(edge));
   }
 
   face_index_t insert(face_t face) override {
-    LOG(WARNING) << "UNIMPLEMENTED";
     return faces.emplace(std::move(face));
   }
 
   vertex_index_t insert(vertex_t vertex) override {
-    LOG(WARNING) << "UNIMPLEMENTED";
     return vertices.emplace(std::move(vertex));
   }
 
   point_index_t insert(point_t point) override {
-    LOG(WARNING) << "UNIMPLEMENTED";
     return points.emplace(std::move(point));
   }
 
@@ -193,23 +190,6 @@ public:
 
   size_t edge_count() const override {
     return edges.count();
-  }
-
-  void resolve(edge_index_t* index, edge_t** edge) const override {
-    *edge = edges.get(index->offset);
-    index->generation = (*edge)->generation;
-  }
-  void resolve(face_index_t* index, face_t** face) const override {
-    *face = faces.get(index->offset);
-    index->generation = (*face)->generation;
-  }
-  void resolve(point_index_t* index, point_t** point) const override {
-    *point = points.get(index->offset);
-    index->generation = (*point)->generation;
-  }
-  void resolve(vertex_index_t* index, vertex_t** vert) const override {
-    *vert = vertices.get(index->offset);
-    index->generation = (*vert)->generation;
   }
 };
 
@@ -341,12 +321,6 @@ vertex_fn_t mesh_t::vertex(vertex_index_t index) const {
   return vertex_fn_t(kernel.get(), index);
 }
 
-point_t* mesh_t::point(offset_t offset) const {
-  point_index_t index(offset);
-  point_t* p;
-  kernel->resolve(&index, &p);
-  return p;
-}
 point_t* mesh_t::point(point_index_t pindex) const {
   return kernel->get(pindex);
 }
@@ -430,12 +404,6 @@ face_index_t mesh_t::add_face(edge_index_t root_eindex) {
 ///////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
-
-element_t::element_t()
-  : status(element_status_t::active)
-  , tag(0)
-  , generation(0)
-{}
 
 point_t::point_t(float x, float y, float z)
   : element_t()

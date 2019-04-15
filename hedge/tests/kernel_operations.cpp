@@ -22,7 +22,7 @@ TEST_CASE( "Removing an element doesn't invalidate other cells", "[kernel_operat
   REQUIRE(pindex3.offset == 4);
 
   hedge::point_t* p = mesh.kernel->get(pindex1);
-  REQUIRE(p->generation == 0);
+  REQUIRE(p->generation == 1);
   REQUIRE(p->position.x() == 1.f);
   REQUIRE(p->position.y() == 0.f);
   REQUIRE(p->position.z() == 0.f);
@@ -30,7 +30,7 @@ TEST_CASE( "Removing an element doesn't invalidate other cells", "[kernel_operat
 
   mesh.kernel->remove(pindex1);
   REQUIRE(mesh.point_count() == 3);
-  REQUIRE(p->generation == 1);
+  REQUIRE(p->generation == 2);
   p = mesh.kernel->get(pindex1);
   REQUIRE_FALSE(p);
 
@@ -44,7 +44,7 @@ TEST_CASE( "Removing an element doesn't invalidate other cells", "[kernel_operat
   REQUIRE(mesh.point_count() == 4);
   p = mesh.kernel->get(pindex1);
   REQUIRE(p);
-  REQUIRE(p->generation == 1);
+  REQUIRE(p->generation == 2);
   REQUIRE(p->position.x() == 0.f);
   REQUIRE(p->position.y() == 1.f);
   REQUIRE(p->position.z() == 1.f);
