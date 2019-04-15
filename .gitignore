@@ -2,9 +2,10 @@ TAGS
 .vs/
 .vscode/
 .build/
+.idea/
 build/
 vendor/bgfx/bgfx/examples/runtime/
-logs/
+/logs/
 Unreal/Hedge/Intermediate/
 Unreal/Hedge/Binaries/
 Unreal/Hedge/Saved/
