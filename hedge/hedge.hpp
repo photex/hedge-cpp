@@ -261,15 +261,20 @@ public:
   edge_index_t close();
 };
 
-/**
-   Mesh can do a great deal of work on it's own as long as the kernel implements
-   a couple of principle functions related to data storage.
- */
 class mesh_t {
-  uint16_t tag;
+  uint16_t _tag;
+  kernel_t::ptr_t _kernel;
 public:
   mesh_t();
   explicit mesh_t(kernel_t::ptr_t&&);
+
+  uint16_t next_tag() {
+    return ++_tag;
+  }
+
+  kernel_t* kernel() {
+    return _kernel.get();
+  }
 
   size_t point_count() const;
   size_t vertex_count() const;
