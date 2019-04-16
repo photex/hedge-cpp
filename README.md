@@ -11,8 +11,9 @@ This is all super duper WIP but if you have feedback or are interested in it I'd
 
 ```cpp
 hedge::mesh_t mesh;
+hedge::mesh_builder_t builder;
 
-auto findex0 = mesh.add_triangle(
+auto findex0 = builder.add_triangle(
   hedge::point_t(0.f, 0.f, 0.f),
   hedge::point_t(1.f, 0.f, 0.f),
   hedge::point_t(0.f, 1.f, 0.f)
