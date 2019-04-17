@@ -374,8 +374,7 @@ edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, edge_index_t root_eindex)
         LOG(ERROR) << "Specified edge is missing its adjacent edge. Unable to initialize loop builder.";
       }
       else {
-        _root_pindex = adjacent_edge.vertex().element()->point_index;
-        _last_pindex = adjacent_edge.next().vertex().element()->point_index;
+        std::tie(_root_pindex, _last_pindex) = mesh.points(adjacent_edge.index());
         if (!_root_pindex || !_last_pindex) {
           LOG(ERROR) << "Loop builder initialized with edge that has no valid points.";
           _root_pindex.reset();
@@ -469,8 +468,12 @@ point_t* mesh_t::point(vertex_index_t vindex) const {
 }
 
 std::tuple<point_index_t, point_index_t> mesh_t::points(edge_index_t eindex) const {
-  auto p0 = edge(eindex).vertex().element()->point_index;
-  auto p1 = edge(eindex).next().vertex().element()->point_index;
+  return points(edge(eindex));
+}
+
+std::tuple<point_index_t, point_index_t> mesh_t::points(edge_fn_t const &edge) const {
+  auto p0 = edge.vertex().element()->point_index;
+  auto p1 = edge.next().vertex().element()->point_index;
   return std::make_tuple(p0, p1);
 }
 

@@ -322,6 +322,7 @@ public:
   point_t* point(vertex_index_t vindex) const;
 
   std::tuple<point_index_t, point_index_t> points(edge_index_t eindex) const;
+  std::tuple<point_index_t, point_index_t> points(edge_fn_t const& edge) const;
 };
 
 } // namespace hedge
