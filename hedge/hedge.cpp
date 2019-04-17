@@ -4,6 +4,7 @@
 #include <array>
 #include <vector>
 #include <queue>
+#include <tuple>
 
 #include <Eigen/Geometry>
 #include <easylogging++.h>
@@ -198,86 +199,224 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-mesh_modifier_t::mesh_modifier_t(mesh_t& mesh)
+namespace utils {
+edge_index_t make_edge(kernel_t* kernel) {
+  auto eindex0 = kernel->insert(edge_t());
+  auto eindex1 = kernel->insert(edge_t());
+
+  auto* e0 = kernel->get(eindex0);
+  auto* e1 = kernel->get(eindex1);
+  e0->adjacent_index = eindex1;
+  e1->adjacent_index = eindex0;
+
+  return eindex0;
+}
+
+// TODO: Does this need to use a tag?
+face_index_t make_face(kernel_t* kernel, edge_index_t root_eindex) {
+  if (!root_eindex) {
+    LOG(ERROR) << "Invalid edge index specified. Unable to create face.";
+    return {};
+  }
+  face_t face;
+  face.edge_index = root_eindex;
+  auto findex = kernel->insert(face);
+
+  auto* elem = kernel->get(root_eindex);
+  auto current_index = root_eindex;
+  while( elem && elem->next_index ) {
+    elem->face_index = findex;
+
+    // prevent an infinite loop when some edge is connected to itself
+    if (elem->next_index == current_index) {
+      break;
+    }
+    // terminate our loop once we reach the root edge
+    if (elem->next_index == root_eindex) {
+      break;
+    }
+
+    elem = kernel->get(elem->next_index);
+  }
+  return findex;
+}
+
+void connect_edges(
+  kernel_t* kernel,
+  edge_index_t prev_eindex,
+  point_index_t pindex,
+  edge_index_t next_eindex
+) {
+  if (!prev_eindex) {
+    LOG(ERROR) << "Invalid edge index specified for 'prev' edge. Unable to connect edges.";
+    return;
+  }
+  if (!next_eindex) {
+    LOG(ERROR) << "Invalid edge index specified for 'next' edge. Unable to connect edges.";
+    return;
+  }
+  if (!prev_eindex) {
+    LOG(ERROR) << "Invalid point index specified. Unable to connect edges.";
+    return;
+  }
+  auto vindex = make_vertex(kernel, next_eindex, pindex);
+
+  auto* prev = kernel->get(prev_eindex);
+  prev->next_index = next_eindex;
+
+  auto* next = kernel->get(next_eindex);
+  next->prev_index = prev_eindex;
+  next->vertex_index = vindex;
+}
+
+vertex_index_t make_vertex(kernel_t *kernel, edge_index_t eindex, point_index_t pindex) {
+  if (!eindex) {
+    LOG(ERROR) << "Invalid edge index specified. Unable to create associated vertex.";
+    return {};
+  }
+  auto vindex = kernel->emplace(vertex_t());
+  auto* vertex = kernel->get(vindex);
+  vertex->point_index = pindex;
+  vertex->edge_index = eindex;
+  return vindex;
+}
+
+} // namespace utils
+
+mesh_builder_t::mesh_builder_t(mesh_t& mesh)
   : _mesh(mesh)
 {}
 
-vertex_index_t mesh_modifier_t::make_vertex(point_index_t pindex) {
-  vertex_t vert;
-  vert.point_index = pindex;
-  return _mesh.kernel->insert(vert);
+face_index_t mesh_builder_t::add_triangle(point_t p0, point_t p1, point_t p2) {
+  auto* kernel = _mesh.kernel();
+  auto pindex0 = kernel->emplace(std::move(p0));
+  auto pindex1 = kernel->emplace(std::move(p1));
+  auto pindex2 = kernel->emplace(std::move(p2));
+  return add_triangle(pindex0, pindex1, pindex2);
 }
 
-void mesh_modifier_t::update_vertex(vertex_index_t vindex, edge_index_t eindex) {
-  auto* vert = _mesh.kernel->get(vindex);
-  if (vert) {
-    vert->edge_index = eindex;
+face_index_t mesh_builder_t::add_triangle(
+  point_index_t pindex0,
+  point_index_t pindex1,
+  point_index_t pindex2
+) {
+  auto root_eindex = start_edge_loop(pindex0)
+    .add_point(pindex1)
+    .add_point(pindex2)
+    .close();
+  return utils::make_face(_mesh.kernel(), root_eindex);
+}
+
+face_index_t mesh_builder_t::add_triangle(edge_index_t eindex, point_t p0) {
+  if (!eindex) {
+    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from adjacent edge.";
+    return {};
+  }
+  auto pindex0 = _mesh.kernel()->emplace(std::move(p0));
+  return add_triangle(eindex, pindex0);
+}
+
+face_index_t mesh_builder_t::add_triangle(edge_index_t eindex, point_index_t pindex) {
+  if (!eindex) {
+    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from adjacent edge.";
+    return {};
+  }
+  auto adjacent_index = _mesh.edge(eindex).adjacent().index();
+  auto root_eindex = start_edge_loop(adjacent_index)
+    .add_point(_mesh.edge(eindex).vertex().element()->point_index)
+    .add_point(pindex)
+    .close();
+  return utils::make_face(_mesh.kernel(), root_eindex);
+}
+
+edge_loop_builder_t mesh_builder_t::start_edge_loop(point_index_t pindex) {
+  return {_mesh, pindex};
+}
+
+edge_loop_builder_t mesh_builder_t::start_edge_loop(edge_index_t eindex0) {
+  return {_mesh, eindex0};
+}
+
+// mesh_builder_t
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+
+edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, point_index_t pindex)
+  : _mesh(mesh)
+{
+  if (!pindex) {
+    LOG(ERROR) << "Loop builder initialized with invalid root point index.";
+  }
+  else {
+    auto* kernel = _mesh.kernel();
+    _root_eindex = utils::make_edge(kernel);
+    _last_eindex = _root_eindex;
+    _root_pindex = pindex;
+    _last_pindex = _root_pindex;
   }
 }
 
-edge_index_t mesh_modifier_t::make_edge(vertex_index_t vindex) {
-  edge_t edge;
-  edge.vertex_index = vindex;
-  auto eindex = _mesh.kernel->insert(edge);
-  update_vertex(vindex, eindex);
-  return eindex;
-}
-
-edge_index_t mesh_modifier_t::make_edge(vertex_index_t vindex, edge_index_t prev_eindex) {
-  edge_t edge;
-  edge.vertex_index = vindex;
-  edge.prev_index = prev_eindex;
-  auto eindex = _mesh.kernel->insert(edge);
-  set_next_edge(prev_eindex, eindex);
-  return eindex;
-}
-
-void mesh_modifier_t::connect_edges(edge_index_t prev_eindex, edge_index_t next_eindex) {
-  set_prev_edge(prev_eindex, next_eindex);
-  set_next_edge(prev_eindex, next_eindex);
-}
-
-void mesh_modifier_t::set_next_edge(edge_index_t prev_eindex, edge_index_t next_eindex) {
-  auto* prev = _mesh.kernel->get(prev_eindex);
-  prev->next_index = next_eindex;
-}
-
-void mesh_modifier_t::set_prev_edge(edge_index_t prev_eindex, edge_index_t next_eindex) {
-  auto* next = _mesh.kernel->get(next_eindex);
-  next->prev_index = prev_eindex;
-}
-
-// mesh_modifier_t
-///////////////////////////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////////////////////////
-
-edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, point_index_t root_pindex)
-  : mesh_modifier_t(mesh)
-  , _root_eindex()
-  , _last_eindex()
-{
-  auto vindex = make_vertex(root_pindex);
-  _root_eindex = make_edge(vindex);
-  _last_eindex = _root_eindex;
-}
-
 edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, edge_index_t root_eindex)
-  : mesh_modifier_t(mesh)
-  , _root_eindex(root_eindex)
-  , _last_eindex(root_eindex)
-{}
+  : _mesh(mesh)
+{
+  if (!root_eindex) {
+    LOG(ERROR) << "Loop builder initialized with invalid root edge.";
+  }
+  else {
+    auto edge = mesh.edge(root_eindex);
+    if (edge.face()) {
+      LOG(ERROR) << "Starting a new edge loop from an edge already assigned to a face.";
+    }
+    else {
+      auto adjacent_edge = edge.adjacent();
+      if (!adjacent_edge) {
+        LOG(ERROR) << "Specified edge is missing its adjacent edge. Unable to initialize loop builder.";
+      }
+      else {
+        _root_pindex = adjacent_edge.vertex().element()->point_index;
+        _last_pindex = adjacent_edge.next().vertex().element()->point_index;
+        if (!_root_pindex || !_last_pindex) {
+          LOG(ERROR) << "Loop builder initialized with edge that has no valid points.";
+          _root_pindex.reset();
+          _last_pindex.reset();
+        }
+        else {
+          _root_eindex = root_eindex;
+          _last_eindex = _root_eindex;
+        }
+      }
+    }
+  }
+}
 
-bool edge_loop_builder_t::add_point(point_index_t next_pindex) {
-  if (!_last_eindex) return false;
-  auto vindex = make_vertex(next_pindex);
-  _last_eindex = make_edge(vindex, _last_eindex);
-  return true;
+edge_loop_builder_t& edge_loop_builder_t::add_point(point_index_t next_pindex) {
+  if (!_last_pindex) {
+    LOG(WARNING) << "Unable to add point to uninitialized loop builder.";
+  }
+  else {
+    auto* kernel = _mesh.kernel();
+    auto current_eindex = utils::make_edge(kernel);
+    utils::connect_edges(kernel, _last_eindex, _last_pindex, current_eindex);
+    _last_pindex = next_pindex;
+    _last_eindex = current_eindex;
+  }
+  return *this;
 }
 
 edge_index_t edge_loop_builder_t::close()  {
-  connect_edges(_last_eindex, _root_eindex);
-  _last_eindex.reset();
+  if (!_last_pindex) {
+    LOG(ERROR) << "Unable to close an uninitialized loop builder.";
+  }
+  else if (_last_pindex == _root_pindex) {
+    LOG(ERROR) << "Unable to close loop when the previous point and the root point are the same.";
+  }
+  else {
+    auto* kernel = _mesh.kernel();
+    utils::connect_edges(kernel, _last_eindex, _last_pindex, _root_eindex);
+    // Make sure we have no references to existing elements.
+    _last_pindex.reset();
+  }
   return _root_eindex;
 }
 
@@ -287,117 +426,52 @@ edge_index_t edge_loop_builder_t::close()  {
 ///////////////////////////////////////////////////////////////////////////////
 
 mesh_t::mesh_t()
-  : tag(0)
-  , kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
+  : _tag(0)
+  , _kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
 {}
 
 mesh_t::mesh_t(kernel_t::ptr_t&& _kernel)
-  : tag(0)
-  , kernel(std::move(_kernel))
+  : _tag(0)
+  , _kernel(std::move(_kernel))
 {}
 
 size_t mesh_t::point_count() const {
-  return kernel->point_count() - 1;
+  return _kernel->point_count() - 1;
 }
 size_t mesh_t::vertex_count() const {
-  return kernel->vertex_count() - 1;
+  return _kernel->vertex_count() - 1;
 }
 size_t mesh_t::edge_count() const {
-  return kernel->edge_count() - 1;
+  return _kernel->edge_count() - 1;
 }
 size_t mesh_t::face_count() const {
-  return kernel->face_count() - 1;
+  return _kernel->face_count() - 1;
 }
 
 edge_fn_t mesh_t::edge(edge_index_t index) const {
-  return edge_fn_t(kernel.get(), index);
+  return edge_fn_t(_kernel.get(), index);
 }
 
 face_fn_t mesh_t::face(face_index_t index) const {
-  return face_fn_t(kernel.get(), index);
+  return face_fn_t(_kernel.get(), index);
 }
 
 vertex_fn_t mesh_t::vertex(vertex_index_t index) const {
-  return vertex_fn_t(kernel.get(), index);
+  return vertex_fn_t(_kernel.get(), index);
 }
 
 point_t* mesh_t::point(point_index_t pindex) const {
-  return kernel->get(pindex);
+  return _kernel->get(pindex);
 }
 point_t* mesh_t::point(vertex_index_t vindex) const {
-  auto* vert = kernel->get(vindex);
+  auto* vert = _kernel->get(vindex);
   return point(vert->point_index);
 }
 
-std::pair<point_t*, point_t*> mesh_t::points(edge_index_t eindex) const {
-  auto* p0 = edge(eindex).vertex().point();
-  auto* p1 = edge(eindex).next().vertex().point();
-  return std::make_pair(p0, p1);
-}
-
-point_index_t mesh_t::add_point(float x, float y, float z) {
-  return kernel->emplace(point_t(x, y, z));
-}
-
-edge_index_t mesh_t::add_edge(point_index_t pindex0, point_index_t pindex1) {
-  vertex_t v0, v1;
-  v0.point_index = pindex0;
-  v1.point_index = pindex1;
-
-  auto vindex0 = kernel->insert(v0);
-  auto vindex1 = kernel->insert(v1);
-
-  edge_t e0, e1;
-  e0.vertex_index = vindex0;
-  e1.vertex_index = vindex1;
-
-  auto eindex0 = kernel->insert(e0);
-  auto eindex1 = kernel->insert(e1);
-
-  kernel->get(vindex0)->edge_index = eindex0;
-  kernel->get(vindex1)->edge_index = eindex1;
-
-  return eindex0;
-}
-
-face_index_t mesh_t::add_triangle(point_t p0, point_t p1, point_t p2) {
-  auto pindex0 = kernel->emplace(std::move(p0));
-  auto pindex1 = kernel->emplace(std::move(p1));
-  auto pindex2 = kernel->emplace(std::move(p2));
-  return add_triangle(pindex0, pindex1, pindex2);
-}
-
-face_index_t mesh_t::add_triangle(point_index_t pindex0, point_index_t pindex1, point_index_t pindex3) {
-  edge_loop_builder_t loop(*this, pindex0);
-  loop.add_point(pindex1);
-  loop.add_point(pindex3);
-  auto root_eindex = loop.close();
-  return add_face(root_eindex);
-}
-
-face_index_t mesh_t::add_triangle(edge_index_t eindex, point_index_t pindex) {
-  auto adjacent_index = edge(eindex).adjacent().index();
-  edge_loop_builder_t loop(*this, adjacent_index);
-  loop.add_point(edge(eindex).vertex().element()->point_index);
-  loop.add_point(pindex);
-  auto root_eindex = loop.close();
-  return add_face(root_eindex);
-}
-
-face_index_t mesh_t::add_face(edge_index_t root_eindex) {
-  tag++;
-
-  face_t face;
-  face.edge_index = root_eindex;
-  auto findex = kernel->insert(face);
-
-  auto* elem = kernel->get(root_eindex);
-  while( elem && elem->tag != tag ) {
-    elem->tag = tag;
-    elem->face_index = findex;
-    elem = kernel->get(elem->next_index);
-  }
-  return findex;
+std::tuple<point_index_t, point_index_t> mesh_t::points(edge_index_t eindex) const {
+  auto p0 = edge(eindex).vertex().element()->point_index;
+  auto p1 = edge(eindex).next().vertex().element()->point_index;
+  return std::make_tuple(p0, p1);
 }
 
 // mesh_t
@@ -463,10 +537,16 @@ edge_fn_t edge_fn_t::adjacent() const {
 bool edge_fn_t::is_boundary() const {
   auto* edge = element();
   if (edge != nullptr) {
-    auto adjacent_face = adjacent().face();
-    if (adjacent_face) {
-      return false;
+    if (!edge->face_index) {
+      return true;
     }
+
+    auto* adjacent_edge = adjacent().element();
+    if (!adjacent_edge->face_index) {
+      return true;
+    }
+
+    return false;
   }
   return true;
 }
@@ -497,10 +577,10 @@ edge_fn_t face_fn_t::edge() const {
 float calc_area(point_t const* p0, point_t const* p1, point_t const* p2) {
   auto A = p1->position - p0->position;
   auto B = p2->position - p0->position;
-  return A.cross(B).norm() / 2.0f;
+  auto magnitude = A.cross(B).norm();
+  return magnitude / 2.0f;
 }
 
-// TODO: tests
 float face_fn_t::area() const {
   auto area = 0.0f;
   auto v0 = edge().vertex();

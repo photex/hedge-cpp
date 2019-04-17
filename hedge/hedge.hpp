@@ -13,6 +13,8 @@ struct point_t; struct point_index_t;
 
 class kernel_t;
 class mesh_t;
+class mesh_builder_t;
+class edge_loop_builder_t;
 
 using position_t = Eigen::Vector3f;
 using color_t = Eigen::Vector4f;
@@ -67,7 +69,7 @@ struct index_t {
   }
 
   explicit operator bool() const noexcept {
-    return offset != 0;
+    return offset > 0;
   }
 };
 
@@ -153,7 +155,7 @@ struct point_t : element_t {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// "Function sets" proxy the mesh and elements and provide an easy access api
+// Mesh element proxies to allow easy traversal.
 
 /**
    We have this simple templated base class which allows functions that request
@@ -228,39 +230,70 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace utils {
+edge_index_t make_edge(kernel_t* kernel);
+face_index_t make_face(kernel_t* kernel, edge_index_t root_eindex);
+vertex_index_t make_vertex(kernel_t* kernel, edge_index_t eindex, point_index_t pindex);
+void connect_edges(
+  kernel_t* kernel,
+  edge_index_t prev_eindex,
+  point_index_t pindex,
+  edge_index_t next_eindex
+  );
+} // namespace utils
+
 /**
- * Provide whatever functions needed to perform basic mesh operations at
- * a higher level.
+ * TODO
  */
-class mesh_modifier_t {
+class mesh_builder_t {
 protected:
   mesh_t& _mesh;
-  explicit mesh_modifier_t(mesh_t& mesh);
+public:
+  explicit mesh_builder_t(mesh_t& mesh);
 
-  vertex_index_t make_vertex(point_index_t pindex);
-  void update_vertex(vertex_index_t vindex, edge_index_t eindex);
+  face_index_t add_triangle(point_t p0, point_t p1, point_t p2);
+  face_index_t add_triangle(point_index_t pindex0, point_index_t pindex1, point_index_t pindex2);
+  face_index_t add_triangle(edge_index_t eindex, point_t p0);
+  face_index_t add_triangle(edge_index_t eindex, point_index_t pindex);
 
-  edge_index_t make_edge(vertex_index_t vindex);
-  edge_index_t make_edge(vertex_index_t vindex, edge_index_t prev_eindex);
-  void set_next_edge(edge_index_t prev_eindex, edge_index_t next_eindex);
-  void set_prev_edge(edge_index_t prev_eindex, edge_index_t next_eindex);
-  void connect_edges(edge_index_t prev_eindex, edge_index_t next_eindex);
+  edge_loop_builder_t start_edge_loop(point_index_t pindex);
+  edge_loop_builder_t start_edge_loop(edge_index_t eindex0);
 };
 
 /**
  * A simple interface for constructing edge loops originating at the
  * specified point.
  */
-class edge_loop_builder_t : public mesh_modifier_t {
+class edge_loop_builder_t {
+  mesh_t& _mesh;
   edge_index_t _root_eindex;
   edge_index_t _last_eindex;
+  point_index_t _root_pindex;
+  point_index_t _last_pindex;
 public:
-  edge_loop_builder_t(mesh_t& mesh, point_index_t root_pindex);
+  /**
+   * Starts a new edge loop.
+   * @param mesh
+   * @param pindex0
+   * @param pindex1
+   */
+  edge_loop_builder_t(mesh_t& mesh, point_index_t pindex);
+
+  /**
+   * Starts an edge loop from an existing boundary edge.
+   * @param mesh
+   * @param root_eindex
+   */
   edge_loop_builder_t(mesh_t& mesh, edge_index_t root_eindex);
-  bool add_point(point_index_t next_pindex);
+
+  edge_loop_builder_t& add_point(point_index_t next_pindex);
+
   edge_index_t close();
 };
 
+/**
+ * TODO
+ */
 class mesh_t {
   uint16_t _tag;
   kernel_t::ptr_t _kernel;
@@ -288,18 +321,7 @@ public:
   point_t* point(point_index_t pindex) const;
   point_t* point(vertex_index_t vindex) const;
 
-  std::pair<point_t*, point_t*> points(edge_index_t eindex) const;
-
-  point_index_t add_point(float x, float y, float z);
-  edge_index_t add_edge(point_index_t pindex0, point_index_t pindex1);
-
-  face_index_t add_triangle(point_t p0, point_t p1, point_t p2);
-  face_index_t add_triangle(point_index_t pindex0, point_index_t pindex1, point_index_t pindex3);
-  face_index_t add_triangle(edge_index_t eindex, point_index_t pindex);
-
-  face_index_t add_face(edge_index_t root_eindex);
-
-  kernel_t::ptr_t kernel;
+  std::tuple<point_index_t, point_index_t> points(edge_index_t eindex) const;
 };
 
 } // namespace hedge

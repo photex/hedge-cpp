@@ -57,10 +57,11 @@ TEST_CASE("Face function sets can be given null input when needed and can be che
 TEST_CASE( "The default basic_mesh_t is of the expected number of elements", "[mesh]" ) {
   hedge::mesh_t mesh;
 
-  REQUIRE(mesh.kernel->point_count() == 1);
-  REQUIRE(mesh.kernel->vertex_count() == 1);
-  REQUIRE(mesh.kernel->face_count() == 1);
-  REQUIRE(mesh.kernel->edge_count() == 1);
+  auto* kernel = mesh.kernel();
+  REQUIRE(kernel->point_count() == 1);
+  REQUIRE(kernel->vertex_count() == 1);
+  REQUIRE(kernel->face_count() == 1);
+  REQUIRE(kernel->edge_count() == 1);
 
   // The mesh should report the count as the user of the api would expect
   REQUIRE(mesh.point_count() == 0);
@@ -69,3 +70,22 @@ TEST_CASE( "The default basic_mesh_t is of the expected number of elements", "[m
   REQUIRE(mesh.edge_count() == 0);
 }
 
+TEST_CASE("The edge loop builder will not modify a mesh when given bad input.", "[builders]") {
+  using hedge::mesh_t;
+  using hedge::mesh_builder_t;
+  using hedge::point_index_t;
+
+  mesh_t mesh;
+  mesh_builder_t builder(mesh);
+
+  auto eindex = builder.start_edge_loop(point_index_t(0))
+    .add_point(point_index_t(1))
+    .add_point(point_index_t(2))
+    .close();
+
+  REQUIRE(mesh.point_count() == 0);
+  REQUIRE(mesh.vertex_count() == 0);
+  REQUIRE(mesh.face_count() == 0);
+  REQUIRE(mesh.edge_count() == 0);
+  REQUIRE_FALSE(eindex);
+}
