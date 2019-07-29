@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 #include <tuple>
+#include <limits>
 
 #include <Eigen/Geometry>
 #include <easylogging++.h>
@@ -17,7 +18,7 @@ namespace hedge {
    to create a simple templated wrapper over std::vector which implements the
    requirements for element storage.
 
-   This is used by `basic_kernel_t`. 
+   This is used by `basic_kernel_t`.
  */
 template<typename TElement, typename TElementIndex>
 class element_vector_t {
@@ -77,7 +78,9 @@ public:
       (*element_at_index) = element;
     }
     else {
-      index.offset = collection.size();
+      auto offset = collection.size();
+      assert(offset < std::numeric_limits<offset_t>::max());
+      index.offset = static_cast<offset_t>(offset);
       index.generation = element.generation;
       collection.emplace_back(std::forward<TElement>(element));
     }
@@ -87,14 +90,18 @@ public:
   void remove(TElementIndex index) {
     auto* element_at_index = get(index);
     if (element_at_index != nullptr) {
-      element_at_index->generation++;
       element_at_index->status = element_status_t::inactive;
-      index.generation++;
+      element_at_index->generation++;
+      auto max_generation = std::numeric_limits<generation_t>::max();
+      if (element_at_index->generation == max_generation) {
+        element_at_index->generation = 1;
+      }
+      index.generation = element_at_index->generation;
       free_cells.push(index);
     }
   }
 
-  // TODO: tests
+  // TODO: Add tests for this
   void swap(TElementIndex aindex, TElementIndex bindex) {
     auto* element_a = get(aindex);
     auto* element_b = get(bindex);
@@ -164,16 +171,16 @@ public:
     return points.emplace(std::forward<point_t>(point));
   }
 
-  void remove(edge_index_t index) override {
+  void remove(edge_index_t const index) override {
     return edges.remove(index);
   }
-  void remove(face_index_t index) override {
+  void remove(face_index_t const index) override {
     return faces.remove(index);
   }
-  void remove(vertex_index_t index) override {
+  void remove(vertex_index_t const index) override {
     return vertices.remove(index);
   }
-  void remove(point_index_t index) override {
+  void remove(point_index_t const index) override {
     return points.remove(index);
   }
 
@@ -191,6 +198,10 @@ public:
 
   size_t edge_count() const override {
     return edges.count();
+  }
+
+  void defrag() override {
+    LOG(WARNING) << "defrag not yet implemented.";
   }
 };
 
@@ -220,7 +231,7 @@ face_index_t make_face(kernel_t* kernel, edge_index_t root_eindex) {
   }
   face_t face;
   face.edge_index = root_eindex;
-  auto findex = kernel->insert(face);
+  auto const findex = kernel->insert(face);
 
   auto* elem = kernel->get(root_eindex);
   auto current_index = root_eindex;

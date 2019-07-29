@@ -18,8 +18,8 @@ class edge_loop_builder_t;
 
 using position_t = Eigen::Vector3f;
 using color_t = Eigen::Vector4f;
-using offset_t = size_t;
-using generation_t = size_t;
+using offset_t = uint32_t;
+using generation_t = uint32_t;
 
 /**
    Using a strong index type instead of a bare pointer or generic integer index
@@ -113,6 +113,8 @@ public:
   virtual size_t vertex_count() const = 0;
   virtual size_t face_count() const = 0;
   virtual size_t edge_count() const = 0;
+
+  virtual void defrag() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,7 +245,7 @@ void connect_edges(
 } // namespace utils
 
 /**
- * TODO
+ * TODO: Add documentation.
  */
 class mesh_builder_t {
 protected:
@@ -292,7 +294,7 @@ public:
 };
 
 /**
- * TODO
+ * TODO: Add documentation.
  */
 class mesh_t {
   uint16_t _tag;
