@@ -12,3 +12,4 @@ Unreal/Hedge/Saved/
 Unreal/Hedge/.vs/
 /bazel-*/
 compile_commands.json
+*.log
