@@ -2,37 +2,44 @@
 #include "hedge.hpp"
 
 #include <array>
-#include <vector>
+#include <limits>
 #include <queue>
 #include <tuple>
-#include <limits>
+#include <vector>
 
 #include <Eigen/Geometry>
 #include <easylogging++.h>
 
-
 namespace hedge {
 
+face_index_t const face_index_t::invalid;
+vertex_index_t const vertex_index_t::invalid;
+edge_index_t const edge_index_t::invalid;
+point_index_t const point_index_t::invalid;
+
+face_fn_t const face_fn_t::invalid(nullptr, face_index_t::invalid);
+vertex_fn_t const vertex_fn_t::invalid(nullptr, vertex_index_t::invalid);
+edge_fn_t const edge_fn_t::invalid(nullptr, edge_index_t::invalid);
+point_fn_t const point_fn_t::invalid(nullptr, point_index_t::invalid);
+
 /**
-   Rather than create a bunch of preprocessor macros to prevent copypasta I decided
-   to create a simple templated wrapper over std::vector which implements the
-   requirements for element storage.
+   Rather than create a bunch of preprocessor macros to prevent copypasta I
+   decided to create a simple templated wrapper over std::vector which
+   implements the requirements for element storage.
 
    This is used by `basic_kernel_t`.
  */
-template<typename TElement, typename TElementIndex>
-class element_vector_t {
+template <typename TElement, typename TElementIndex>
+class element_vector_t
+{
 public:
   using collection_t = std::vector<TElement>;
   using free_cells_t =
-    std::priority_queue<
-      TElementIndex,
-      std::vector<TElementIndex>,
-      std::greater<>
-    >;
+    std::priority_queue<TElementIndex, std::vector<TElementIndex>,
+                        std::greater<>>;
 
   element_vector_t() {
-    collection.emplace_back( TElement {} );
+    collection.emplace_back(TElement{});
   }
 
   void reserve(size_t elements) {
@@ -47,9 +54,10 @@ public:
     TElement* element = get(index.offset);
     if (element != nullptr && index.generation != 0) {
       if (element->generation != index.generation) {
-        LOG(WARNING) << "Generation mismatch for element: " << index.offset << ", " << index.generation;
-        LOG(DEBUG) << "Offset: " << index.offset
-                   << ", Generation " << index.generation << " != " << element->generation;
+        LOG(WARNING) << "Generation mismatch for element: " << index.offset
+                     << ", " << index.generation;
+        LOG(DEBUG) << "Offset: " << index.offset << ", Generation "
+                   << index.generation << " != " << element->generation;
         element = nullptr;
       }
     }
@@ -73,14 +81,14 @@ public:
     if (!free_cells.empty()) {
       index = free_cells.top();
       free_cells.pop();
-      element.generation = index.generation;
+      element.generation     = index.generation;
       auto* element_at_index = get(index.offset);
-      (*element_at_index) = element;
+      (*element_at_index)    = element;
     }
     else {
       auto offset = collection.size();
       assert(offset < std::numeric_limits<offset_t>::max());
-      index.offset = static_cast<offset_t>(offset);
+      index.offset     = static_cast<offset_t>(offset);
       index.generation = element.generation;
       collection.emplace_back(std::forward<TElement>(element));
     }
@@ -110,8 +118,8 @@ public:
       element_b->generation++;
 
       TElement temp = *element_a;
-      *element_a = *element_b;
-      *element_b = temp;
+      *element_a    = *element_b;
+      *element_b    = temp;
     }
   }
 
@@ -122,11 +130,127 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////////
 
-class basic_kernel_t : public kernel_t {
+edge_index_t kernel_t::make_edge_pair() {
+  auto eindex0 = insert(edge_t());
+  auto eindex1 = insert(edge_t());
+
+  auto* e0           = get(eindex0);
+  auto* e1           = get(eindex1);
+  e0->adjacent_index = eindex1;
+  e1->adjacent_index = eindex0;
+
+  return eindex0;
+}
+
+// FIXME: If given certain inputs we'd end up with invalid face data left in
+// memory
+face_index_t kernel_t::make_face(edge_index_t root_eindex) {
+  auto* elem = get(root_eindex);
+  if (elem == nullptr) {
+    LOG(ERROR) << "Invalid root edge specified.";
+    return face_index_t::invalid;
+  }
+
+  auto const findex = emplace(face_t());
+  auto* face        = get(findex);
+  face->root_edge_index = root_eindex;
+
+  auto current_index = root_eindex;
+  while (current_index) {
+    elem = get(current_index);
+    if (elem == nullptr) {
+      LOG(ERROR) << "Disconnected edge loop. Unable to build face.";
+      return face_index_t::invalid;
+    }
+    face->edges.insert(current_index);
+    elem->face_index = findex;
+
+    auto next_eindex = elem->next_index;
+
+    // prevent an infinite loop when some edge is connected to itself
+    if (next_eindex == current_index) {
+      LOG(ERROR)
+        << "A face requires a connected edge loop of at least 3 edges. "
+           "Self-connected edges are not supported.";
+      return face_index_t::invalid;
+    }
+    // terminate our loop once we reach the root edge
+    if (next_eindex == root_eindex) {
+      LOG(DEBUG) << "Completed edge loop.";
+      break;
+    }
+
+    current_index = next_eindex;
+  }
+
+  return findex;
+}
+
+vertex_index_t kernel_t::connect_edges(
+  edge_index_t eindex,
+  point_index_t pindex,
+  edge_index_t next_eindex
+) {
+  if (!eindex) {
+    LOG(ERROR) << "Invalid in edge index specified. Unable to create "
+                  "associated vertex.";
+    return vertex_index_t::invalid;
+  }
+  if (!pindex) {
+    LOG(ERROR) << "Invalid point index specified. Unable to create vertex.";
+    return vertex_index_t::invalid;
+  }
+  if (!next_eindex) {
+    LOG(ERROR) << "Invalid out edge index specified. Unable to create "
+                  "associated vertex.";
+    return vertex_index_t::invalid;
+  }
+
+  auto* edge      = get(eindex);
+  auto* point     = get(pindex);
+  auto* next_edge = get(next_eindex);
+
+  if (edge == nullptr) {
+    LOG(ERROR) << "Invalid edge specified for incoming edge.";
+    return vertex_index_t::invalid;
+  }
+
+  if (point == nullptr) {
+    LOG(ERROR) << "Invalid point specified.";
+    return vertex_index_t::invalid;
+  }
+
+  if (next_edge == nullptr) {
+    LOG(ERROR) << "Invalid edge specified for outgoing edge.";
+    return vertex_index_t::invalid;
+  }
+
+  vertex_t vertex;
+  vertex.point_index = pindex;
+  vertex.edge_index  = next_eindex;
+  auto vindex        = emplace(std::move(vertex));
+  if (!vindex) {
+    LOG(ERROR)
+      << "Failed to create associated vertex. Edges can not be connected.";
+    return vertex_index_t::invalid;
+  }
+
+  edge->next_index = next_eindex;
+  next_edge->vertex_index = vindex;
+  next_edge->prev_index = eindex;
+  point->vertices.insert(vindex);
+
+  return vindex;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+class basic_kernel_t : public kernel_t
+{
   element_vector_t<vertex_t, vertex_index_t> vertices;
-  element_vector_t<face_t, face_index_t>     faces;
-  element_vector_t<edge_t, edge_index_t>     edges;
-  element_vector_t<point_t, point_index_t>   points;
+  element_vector_t<face_t, face_index_t> faces;
+  element_vector_t<edge_t, edge_index_t> edges;
+  element_vector_t<point_t, point_index_t> points;
 
 public:
   edge_t* get(edge_index_t index) override {
@@ -210,93 +334,8 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace utils {
-edge_index_t make_edge(kernel_t* kernel) {
-  auto eindex0 = kernel->insert(edge_t());
-  auto eindex1 = kernel->insert(edge_t());
-
-  auto* e0 = kernel->get(eindex0);
-  auto* e1 = kernel->get(eindex1);
-  e0->adjacent_index = eindex1;
-  e1->adjacent_index = eindex0;
-
-  return eindex0;
-}
-
-// TODO: Does this need to use a tag?
-face_index_t make_face(kernel_t* kernel, edge_index_t root_eindex) {
-  if (!root_eindex) {
-    LOG(ERROR) << "Invalid edge index specified. Unable to create face.";
-    return {};
-  }
-  face_t face;
-  face.edge_index = root_eindex;
-  auto const findex = kernel->insert(face);
-
-  auto* elem = kernel->get(root_eindex);
-  auto current_index = root_eindex;
-  while( elem && elem->next_index ) {
-    elem->face_index = findex;
-
-    // prevent an infinite loop when some edge is connected to itself
-    if (elem->next_index == current_index) {
-      break;
-    }
-    // terminate our loop once we reach the root edge
-    if (elem->next_index == root_eindex) {
-      break;
-    }
-
-    elem = kernel->get(elem->next_index);
-  }
-  return findex;
-}
-
-void connect_edges(
-  kernel_t* kernel,
-  edge_index_t prev_eindex,
-  point_index_t pindex,
-  edge_index_t next_eindex
-) {
-  if (!prev_eindex) {
-    LOG(ERROR) << "Invalid edge index specified for 'prev' edge. Unable to connect edges.";
-    return;
-  }
-  if (!next_eindex) {
-    LOG(ERROR) << "Invalid edge index specified for 'next' edge. Unable to connect edges.";
-    return;
-  }
-  if (!prev_eindex) {
-    LOG(ERROR) << "Invalid point index specified. Unable to connect edges.";
-    return;
-  }
-  auto vindex = make_vertex(kernel, next_eindex, pindex);
-
-  auto* prev = kernel->get(prev_eindex);
-  prev->next_index = next_eindex;
-
-  auto* next = kernel->get(next_eindex);
-  next->prev_index = prev_eindex;
-  next->vertex_index = vindex;
-}
-
-vertex_index_t make_vertex(kernel_t *kernel, edge_index_t eindex, point_index_t pindex) {
-  if (!eindex) {
-    LOG(ERROR) << "Invalid edge index specified. Unable to create associated vertex.";
-    return {};
-  }
-  auto vindex = kernel->emplace(vertex_t());
-  auto* vertex = kernel->get(vindex);
-  vertex->point_index = pindex;
-  vertex->edge_index = eindex;
-  return vindex;
-}
-
-} // namespace utils
-
 mesh_builder_t::mesh_builder_t(mesh_t& mesh)
-  : _mesh(mesh)
-{}
+  : _mesh(mesh) {}
 
 face_index_t mesh_builder_t::add_triangle(point_t p0, point_t p1, point_t p2) {
   auto* kernel = _mesh.kernel();
@@ -315,29 +354,34 @@ face_index_t mesh_builder_t::add_triangle(
     .add_point(pindex1)
     .add_point(pindex2)
     .close();
-  return utils::make_face(_mesh.kernel(), root_eindex);
+  return _mesh.kernel()->make_face(root_eindex);
 }
 
 face_index_t mesh_builder_t::add_triangle(edge_index_t eindex, point_t p0) {
   if (!eindex) {
-    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from adjacent edge.";
-    return {};
+    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from "
+                  "adjacent edge.";
+    return face_index_t::invalid;
   }
   auto pindex0 = _mesh.kernel()->emplace(std::move(p0));
   return add_triangle(eindex, pindex0);
 }
 
-face_index_t mesh_builder_t::add_triangle(edge_index_t eindex, point_index_t pindex) {
+face_index_t mesh_builder_t::add_triangle(
+  edge_index_t eindex,
+  point_index_t pindex
+) {
   if (!eindex) {
-    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from adjacent edge.";
-    return {};
+    LOG(ERROR) << "Invalid edge index specified. Unable to add triangle from "
+                  "adjacent edge.";
+    return face_index_t::invalid;
   }
   auto adjacent_index = _mesh.edge(eindex).adjacent().index();
-  auto root_eindex = start_edge_loop(adjacent_index)
-    .add_point(_mesh.edge(eindex).vertex().element()->point_index)
-    .add_point(pindex)
-    .close();
-  return utils::make_face(_mesh.kernel(), root_eindex);
+  auto root_eindex    = start_edge_loop(adjacent_index)
+                       .add_point(_mesh.edge(eindex).vertex().point().index())
+                       .add_point(pindex)
+                       .close();
+  return _mesh.kernel()->make_face(root_eindex);
 }
 
 edge_loop_builder_t mesh_builder_t::start_edge_loop(point_index_t pindex) {
@@ -354,14 +398,13 @@ edge_loop_builder_t mesh_builder_t::start_edge_loop(edge_index_t eindex0) {
 ///////////////////////////////////////////////////////////////////////////////
 
 edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, point_index_t pindex)
-  : _mesh(mesh)
-{
+  : _mesh(mesh) {
   if (!pindex) {
     LOG(ERROR) << "Loop builder initialized with invalid root point index.";
   }
   else {
     auto* kernel = _mesh.kernel();
-    _root_eindex = utils::make_edge(kernel);
+    _root_eindex = kernel->make_edge_pair();
     _last_eindex = _root_eindex;
     _root_pindex = pindex;
     _last_pindex = _root_pindex;
@@ -369,25 +412,29 @@ edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, point_index_t pindex)
 }
 
 edge_loop_builder_t::edge_loop_builder_t(mesh_t& mesh, edge_index_t root_eindex)
-  : _mesh(mesh)
-{
+  : _mesh(mesh) {
   if (!root_eindex) {
     LOG(ERROR) << "Loop builder initialized with invalid root edge.";
   }
   else {
     auto edge = mesh.edge(root_eindex);
     if (edge.face()) {
-      LOG(ERROR) << "Starting a new edge loop from an edge already assigned to a face.";
+      LOG(ERROR)
+        << "Starting a new edge loop from an edge already assigned to a face.";
     }
     else {
       auto adjacent_edge = edge.adjacent();
       if (!adjacent_edge) {
-        LOG(ERROR) << "Specified edge is missing its adjacent edge. Unable to initialize loop builder.";
+        LOG(ERROR) << "Specified edge is missing its adjacent edge. Unable to "
+                      "initialize loop builder.";
       }
       else {
-        std::tie(_root_pindex, _last_pindex) = mesh.points(adjacent_edge.index());
+        auto edge_points = adjacent_edge.points();
+        _root_pindex     = edge_points[0].index();
+        _last_pindex     = edge_points[1].index();
         if (!_root_pindex || !_last_pindex) {
-          LOG(ERROR) << "Loop builder initialized with edge that has no valid points.";
+          LOG(ERROR)
+            << "Loop builder initialized with edge that has no valid points.";
           _root_pindex.reset();
           _last_pindex.reset();
         }
@@ -405,25 +452,26 @@ edge_loop_builder_t& edge_loop_builder_t::add_point(point_index_t next_pindex) {
     LOG(WARNING) << "Unable to add point to uninitialized loop builder.";
   }
   else {
-    auto* kernel = _mesh.kernel();
-    auto current_eindex = utils::make_edge(kernel);
-    utils::connect_edges(kernel, _last_eindex, _last_pindex, current_eindex);
+    auto* kernel        = _mesh.kernel();
+    auto current_eindex = kernel->make_edge_pair();
+    auto vindex = kernel->connect_edges(_last_eindex, _last_pindex, current_eindex);
     _last_pindex = next_pindex;
     _last_eindex = current_eindex;
   }
   return *this;
 }
 
-edge_index_t edge_loop_builder_t::close()  {
+edge_index_t edge_loop_builder_t::close() {
   if (!_last_pindex) {
     LOG(ERROR) << "Unable to close an uninitialized loop builder.";
   }
   else if (_last_pindex == _root_pindex) {
-    LOG(ERROR) << "Unable to close loop when the previous point and the root point are the same.";
+    LOG(ERROR) << "Unable to close loop when the previous point and the root "
+                  "point are the same.";
   }
   else {
     auto* kernel = _mesh.kernel();
-    utils::connect_edges(kernel, _last_eindex, _last_pindex, _root_eindex);
+    auto vindex = kernel->connect_edges(_last_eindex, _last_pindex, _root_eindex);
     // Make sure we have no references to existing elements.
     _last_pindex.reset();
   }
@@ -437,13 +485,11 @@ edge_index_t edge_loop_builder_t::close()  {
 
 mesh_t::mesh_t()
   : _tag(0)
-  , _kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
-{}
+  , _kernel(new basic_kernel_t, [](kernel_t* k) { delete k; }) {}
 
 mesh_t::mesh_t(kernel_t::ptr_t&& _kernel)
   : _tag(0)
-  , _kernel(std::move(_kernel))
-{}
+  , _kernel(std::move(_kernel)) {}
 
 size_t mesh_t::point_count() const {
   return _kernel->point_count() - 1;
@@ -470,22 +516,8 @@ vertex_fn_t mesh_t::vertex(vertex_index_t index) const {
   return vertex_fn_t(_kernel.get(), index);
 }
 
-point_t* mesh_t::point(point_index_t pindex) const {
-  return _kernel->get(pindex);
-}
-point_t* mesh_t::point(vertex_index_t vindex) const {
-  auto* vert = _kernel->get(vindex);
-  return point(vert->point_index);
-}
-
-std::tuple<point_index_t, point_index_t> mesh_t::points(edge_index_t eindex) const {
-  return points(edge(eindex));
-}
-
-std::tuple<point_index_t, point_index_t> mesh_t::points(edge_fn_t const &edge) const {
-  auto p0 = edge.vertex().element()->point_index;
-  auto p1 = edge.next().vertex().element()->point_index;
-  return std::make_tuple(p0, p1);
+point_fn_t mesh_t::point(point_index_t pindex) const {
+  return point_fn_t(_kernel.get(), pindex);
 }
 
 // mesh_t
@@ -495,54 +527,49 @@ std::tuple<point_index_t, point_index_t> mesh_t::points(edge_fn_t const &edge) c
 
 point_t::point_t(float x, float y, float z)
   : element_t()
-  , position(x, y, z)
-{}
+  , position(x, y, z) {}
 
 point_t::point_t()
   : element_t()
-  , position(0.0f, 0.0f, 0.0f)
-{}
+  , position(0.0f, 0.0f, 0.0f) {}
+
+point_t::point_t(position_t p)
+  : element_t()
+  , position(p) {}
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#define FN_GETTER(A, B)                           \
-  auto *elem = element();                         \
-  if (elem != nullptr)                            \
-  {                                               \
-    return A;                                     \
-  }                                               \
-  else                                            \
-  {                                               \
-    LOG(DEBUG) << "Returning empty function set"; \
-    return B;                                     \
+#define FN_GETTER(A, B)                                                        \
+  auto* elem = element();                                                      \
+  if (elem != nullptr) {                                                       \
+    return A;                                                                  \
+  }                                                                            \
+  else {                                                                       \
+    LOG(DEBUG) << "Returning empty function set";                              \
+    return B;                                                                  \
   }
 
-#define MAKE_VERT_FN(INDEX) \
-  FN_GETTER(vertex_fn_t(_kernel, INDEX), vertex_fn_t(_kernel, vertex_index_t()))
+#define MAKE_VERT_FN(INDEX)                                                    \
+  FN_GETTER(vertex_fn_t(_kernel, INDEX), vertex_fn_t::invalid)
 
-#define MAKE_FACE_FN(INDEX) \
-  FN_GETTER(face_fn_t(_kernel, INDEX), face_fn_t(_kernel, face_index_t()))
+#define MAKE_FACE_FN(INDEX)                                                    \
+  FN_GETTER(face_fn_t(_kernel, INDEX), face_fn_t::invalid)
 
-#define MAKE_EDGE_FN(INDEX) \
-  FN_GETTER(edge_fn_t(_kernel, INDEX), edge_fn_t(_kernel, edge_index_t()))
+#define MAKE_EDGE_FN(INDEX)                                                    \
+  FN_GETTER(edge_fn_t(_kernel, INDEX), edge_fn_t::invalid)
+
+#define MAKE_POINT_FN(INDEX)                                                   \
+  FN_GETTER(point_fn_t(_kernel, INDEX), point_fn_t::invalid)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-vertex_fn_t edge_fn_t::vertex() const {
-  MAKE_VERT_FN(elem->vertex_index)
-}
+vertex_fn_t edge_fn_t::vertex() const {MAKE_VERT_FN(elem->vertex_index)}
 
-face_fn_t edge_fn_t::face() const {
-  MAKE_FACE_FN(elem->face_index)
-}
+face_fn_t edge_fn_t::face() const {MAKE_FACE_FN(elem->face_index)}
 
-edge_fn_t edge_fn_t::next() const {
-  MAKE_EDGE_FN(elem->next_index)
-}
+edge_fn_t edge_fn_t::next() const {MAKE_EDGE_FN(elem->next_index)}
 
-edge_fn_t edge_fn_t::prev() const {
-  MAKE_EDGE_FN(elem->prev_index)
-}
+edge_fn_t edge_fn_t::prev() const {MAKE_EDGE_FN(elem->prev_index)}
 
 edge_fn_t edge_fn_t::adjacent() const {
   MAKE_EDGE_FN(elem->adjacent_index)
@@ -565,18 +592,34 @@ bool edge_fn_t::is_boundary() const {
   return true;
 }
 
+edge_points_t edge_fn_t::points() const {
+  auto p0 = vertex().point();
+  auto p1 = next().vertex().point();
+  return {p0, p1};
+}
+
+edge_vertices_t edge_fn_t::vertices() const {
+  auto v0 = vertex();
+  auto v1 = next().vertex();
+  return {v0, v1};
+}
+
 // edge_fn_t
 ///////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 
-edge_fn_t vertex_fn_t::edge() const {
-  MAKE_EDGE_FN(elem->edge_index)
+edge_fn_t vertex_fn_t::edge() const {MAKE_EDGE_FN(elem->edge_index)}
+
+point_fn_t vertex_fn_t::point() const {MAKE_POINT_FN(elem->point_index)}
+
+normal_t vertex_fn_t::normal() const {
+  assert(false); // unimplemented
+  return normal_t();
 }
 
-point_t* vertex_fn_t::point() const {
-  auto* vert = element();
-  return _kernel->get(vert->point_index);
+void vertex_fn_t::calculate_normal() {
+  assert(false); // unimplemented
 }
 
 // vertex_fn_t
@@ -584,24 +627,29 @@ point_t* vertex_fn_t::point() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-edge_fn_t face_fn_t::edge() const {
-  MAKE_EDGE_FN(elem->edge_index)
+edge_fn_t face_fn_t::root_edge() const {MAKE_EDGE_FN(elem->root_edge_index)}
+
+edge_index_t::set_t const& face_fn_t::edges() const {
+  auto* face = element();
+  assert(face);
+  return face->edges;
 }
 
 float calc_area(point_t const* p0, point_t const* p1, point_t const* p2) {
-  auto A = p1->position - p0->position;
-  auto B = p2->position - p0->position;
+  auto A         = p1->position - p0->position;
+  auto B         = p2->position - p0->position;
   auto magnitude = A.cross(B).norm();
   return magnitude / 2.0f;
 }
 
 float face_fn_t::area() const {
   auto area = 0.0f;
-  auto v0 = edge().vertex();
-  auto v1 = v0.edge().next().vertex();
-  auto v2 = v1.edge().next().vertex();
-  while(v2 != v0) {
-    area += calc_area(v0.point(), v1.point(), v2.point());
+  auto v0   = root_edge().vertex();
+  auto v1   = v0.edge().next().vertex();
+  auto v2   = v1.edge().next().vertex();
+  while (v2 != v0) {
+    area += calc_area(v0.point().element(), v1.point().element(),
+                      v2.point().element());
     v1 = v2;
     v2 = v1.edge().next().vertex();
   }
@@ -611,4 +659,18 @@ float face_fn_t::area() const {
 // face_fn_t
 ///////////////////////////////////////////////////////////////////////////////
 
+position_t point_fn_t::position() const {
+  auto* elem = _kernel->get(_index);
+  assert(elem);
+  return elem->position;
+}
+
+normal_t point_fn_t::normal() const {
+  assert(false); // unimplemented
+  return normal_t();
+}
+
+void point_fn_t::calculate_normal() {
+  assert(false); // unimplemented
+}
 } // namespace hedge

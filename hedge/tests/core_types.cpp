@@ -34,9 +34,12 @@ TEST_CASE( "An index can be compared with other indexes of the same type.", "[in
 
 TEST_CASE( "Edges can be created and updated.", "[edges]") {
   hedge::edge_t edge;
-  hedge::vertex_index_t vert(3, 0);
-  edge.vertex_index = vert;
-  REQUIRE(edge.vertex_index == vert);
+  hedge::vertex_index_t vert0(3, 0);
+  hedge::vertex_index_t vert1(4, 0);
+  hedge::face_index_t face(1, 0);
+  edge.vertex_index = vert0;
+  edge.face_index = face;
+  REQUIRE(edge.vertex_index == vert0);
 }
 
 TEST_CASE("Edge function sets can be given null input when needed and can be checked.", "[function_sets]") {
