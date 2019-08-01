@@ -13,15 +13,15 @@
 namespace hedge
 {
 
-face_index_t const face_index_t::invalid;
+face_index_t const   face_index_t::invalid;
 vertex_index_t const vertex_index_t::invalid;
-edge_index_t const edge_index_t::invalid;
-point_index_t const point_index_t::invalid;
+edge_index_t const   edge_index_t::invalid;
+point_index_t const  point_index_t::invalid;
 
-face_fn_t const face_fn_t::invalid(nullptr, face_index_t::invalid);
+face_fn_t const   face_fn_t::invalid(nullptr, face_index_t::invalid);
 vertex_fn_t const vertex_fn_t::invalid(nullptr, vertex_index_t::invalid);
-edge_fn_t const edge_fn_t::invalid(nullptr, edge_index_t::invalid);
-point_fn_t const point_fn_t::invalid(nullptr, point_index_t::invalid);
+edge_fn_t const   edge_fn_t::invalid(nullptr, edge_index_t::invalid);
+point_fn_t const  point_fn_t::invalid(nullptr, point_index_t::invalid);
 
 /**
    Rather than create a bunch of preprocessor macros to prevent copypasta I
@@ -172,7 +172,7 @@ face_index_t kernel_t::make_face(edge_index_t root_eindex)
   }
 
   auto const findex     = emplace(face_t());
-  auto* face            = get(findex);
+  auto*      face       = get(findex);
   face->root_edge_index = root_eindex;
 
   auto current_index = root_eindex;
@@ -210,9 +210,9 @@ face_index_t kernel_t::make_face(edge_index_t root_eindex)
   return findex;
 }
 
-vertex_index_t kernel_t::connect_edges(edge_index_t eindex,
+vertex_index_t kernel_t::connect_edges(edge_index_t  eindex,
                                        point_index_t pindex,
-                                       edge_index_t next_eindex)
+                                       edge_index_t  next_eindex)
 {
   if (!eindex)
   {
@@ -278,9 +278,9 @@ vertex_index_t kernel_t::connect_edges(edge_index_t eindex,
 class basic_kernel_t : public kernel_t
 {
   element_vector_t<vertex_t, vertex_index_t> vertices;
-  element_vector_t<face_t, face_index_t> faces;
-  element_vector_t<edge_t, edge_index_t> edges;
-  element_vector_t<point_t, point_index_t> points;
+  element_vector_t<face_t, face_index_t>     faces;
+  element_vector_t<edge_t, edge_index_t>     edges;
+  element_vector_t<point_t, point_index_t>   points;
 
 public:
   edge_t* get(edge_index_t index) override
@@ -392,10 +392,10 @@ mesh_builder_t::mesh_builder_t(mesh_t& mesh)
 
 face_index_t mesh_builder_t::add_triangle(point_t p0, point_t p1, point_t p2)
 {
-  auto* kernel = _mesh.kernel();
-  auto pindex0 = kernel->emplace(std::move(p0));
-  auto pindex1 = kernel->emplace(std::move(p1));
-  auto pindex2 = kernel->emplace(std::move(p2));
+  auto* kernel  = _mesh.kernel();
+  auto  pindex0 = kernel->emplace(std::move(p0));
+  auto  pindex1 = kernel->emplace(std::move(p1));
+  auto  pindex2 = kernel->emplace(std::move(p2));
   return add_triangle(pindex0, pindex1, pindex2);
 }
 
@@ -420,7 +420,7 @@ face_index_t mesh_builder_t::add_triangle(edge_index_t eindex, point_t p0)
   return add_triangle(eindex, pindex0);
 }
 
-face_index_t mesh_builder_t::add_triangle(edge_index_t eindex,
+face_index_t mesh_builder_t::add_triangle(edge_index_t  eindex,
                                           point_index_t pindex)
 {
   if (!eindex)
@@ -522,9 +522,9 @@ edge_loop_builder_t& edge_loop_builder_t::add_point(point_index_t next_pindex)
   }
   else
   {
-    auto* kernel        = _mesh.kernel();
-    auto current_eindex = kernel->make_edge_pair();
-    auto vindex =
+    auto* kernel         = _mesh.kernel();
+    auto  current_eindex = kernel->make_edge_pair();
+    auto  vindex =
       kernel->connect_edges(_last_eindex, _last_pindex, current_eindex);
     _last_pindex = next_pindex;
     _last_eindex = current_eindex;
@@ -546,7 +546,7 @@ edge_index_t edge_loop_builder_t::close()
   else
   {
     auto* kernel = _mesh.kernel();
-    auto vindex =
+    auto  vindex =
       kernel->connect_edges(_last_eindex, _last_pindex, _root_eindex);
     // Make sure we have no references to existing elements.
     _last_pindex.reset();
@@ -560,14 +560,12 @@ edge_index_t edge_loop_builder_t::close()
 ///////////////////////////////////////////////////////////////////////////////
 
 mesh_t::mesh_t()
-  : _tag(0)
-  , _kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
+  : _kernel(new basic_kernel_t, [](kernel_t* k) { delete k; })
 {
 }
 
 mesh_t::mesh_t(kernel_t::ptr_t&& _kernel)
-  : _tag(0)
-  , _kernel(std::move(_kernel))
+  : _kernel(std::move(_kernel))
 {
 }
 
@@ -763,7 +761,7 @@ edge_index_t::set_t const& face_fn_t::edges() const
   return face->edges;
 }
 
-float calc_area(point_t const* p0, point_t const* p1, point_t const* p2)
+float area_of_triangle(point_t const* p0, point_t const* p1, point_t const* p2)
 {
   auto A         = p1->position - p0->position;
   auto B         = p2->position - p0->position;
@@ -771,7 +769,7 @@ float calc_area(point_t const* p0, point_t const* p1, point_t const* p2)
   return magnitude / 2.0f;
 }
 
-float face_fn_t::area() const
+float face_fn_t::calculate_area() const
 {
   auto area = 0.0f;
   auto v0   = root_edge().vertex();
@@ -779,7 +777,7 @@ float face_fn_t::area() const
   auto v2   = v1.edge().next().vertex();
   while (v2 != v0)
   {
-    area += calc_area(
+    area += area_of_triangle(
       v0.point().element(), v1.point().element(), v2.point().element());
     v1 = v2;
     v2 = v1.edge().next().vertex();
@@ -787,12 +785,26 @@ float face_fn_t::area() const
   return area;
 }
 
+normal_t face_fn_t::normal() const
+{
+  auto* elem = element();
+  if (elem)
+  {
+    return elem->normal;
+  }
+  else
+  {
+    LOG(WARNING) << "Attempting to retrieve normal attribute from invalid face.";
+    return normal_t::Zero();
+  }
+}
+
 normal_t face_fn_t::calculate_normal()
 {
   auto* elem = element();
   if (elem)
   {
-    int edge_count = 0;
+    int      edge_count = 0;
     normal_t accum;
     for (auto eindex : elem->edges)
     {
@@ -820,21 +832,63 @@ normal_t face_fn_t::calculate_normal()
 
 position_t point_fn_t::position() const
 {
-  auto* elem = _kernel->get(_index);
-  assert(elem);
-  return elem->position;
+  auto* elem = element();
+  if (elem)
+  {
+    return elem->position;
+  }
+  else
+  {
+    LOG(WARNING)
+      << "Attempting to retrieve position attribute of invalid point.";
+    return position_t::Zero();
+  }
 }
 
 normal_t point_fn_t::normal() const
 {
-  assert(false); // unimplemented
-  return normal_t::Zero();
+  auto* elem = element();
+  if (elem)
+  {
+    return elem->normal;
+  }
+  else
+  {
+    return normal_t::Zero();
+  }
+}
+
+vertex_index_t::set_t const& point_fn_t::vertices() const
+{
+  auto* elem = element();
+  assert(elem);
+  return elem->vertices;
 }
 
 normal_t point_fn_t::calculate_normal()
 {
-  assert(false); // unimplemented
-  return normal_t::Zero();
+  auto* elem = element();
+  if (elem)
+  {
+    int      vert_count = 0;
+    normal_t accum;
+    for (auto eindex : elem->vertices)
+    {
+      vertex_fn_t vertex(_kernel, eindex);
+      if (vertex)
+      {
+        ++vert_count;
+        accum += vertex.calculate_normal();
+      }
+    }
+    elem->normal = (accum / vert_count).normalized();
+    return elem->normal;
+  }
+  else
+  {
+    LOG(WARNING) << "Unable to calculate normal for invalid face.";
+    return normal_t::Zero();
+  }
 }
 
 // point_fn_t

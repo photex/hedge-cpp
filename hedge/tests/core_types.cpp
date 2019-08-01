@@ -39,10 +39,10 @@ TEST_CASE("An index can be compared with other indexes of the same type.",
 
 TEST_CASE("Edges can be created and updated.", "[edges]")
 {
-  hedge::edge_t edge;
+  hedge::edge_t         edge;
   hedge::vertex_index_t vert0(3, 0);
   hedge::vertex_index_t vert1(4, 0);
-  hedge::face_index_t face(1, 0);
+  hedge::face_index_t   face(1, 0);
   edge.vertex_index = vert0;
   edge.face_index   = face;
   REQUIRE(edge.vertex_index == vert0);
@@ -97,7 +97,7 @@ TEST_CASE("The edge loop builder will not modify a mesh when given bad input.",
   using hedge::mesh_t;
   using hedge::point_index_t;
 
-  mesh_t mesh;
+  mesh_t         mesh;
   mesh_builder_t builder(mesh);
 
   // We start the edge loop with an invalid index and expect all futher calls to

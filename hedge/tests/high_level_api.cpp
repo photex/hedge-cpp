@@ -11,16 +11,16 @@ SCENARIO("High level mesh api can \"easily\" build a quad", "[mesh_operations]")
 {
   GIVEN("An empty mesh and builder")
   {
-    hedge::mesh_t mesh;
+    hedge::mesh_t         mesh;
     hedge::mesh_builder_t builder(mesh);
 
     WHEN("We add 4 points")
     {
-      auto* kernel = mesh.kernel();
-      auto pindex0 = kernel->insert(hedge::point_t(0.f, 0.f, 0.f));
-      auto pindex1 = kernel->insert(hedge::point_t(2.f, 0.f, 0.f));
-      auto pindex2 = kernel->insert(hedge::point_t(0.f, 2.f, 0.f));
-      auto pindex3 = kernel->insert(hedge::point_t(2.f, 2.f, 0.f));
+      auto* kernel  = mesh.kernel();
+      auto  pindex0 = kernel->insert(hedge::point_t(0.f, 0.f, 0.f));
+      auto  pindex1 = kernel->insert(hedge::point_t(2.f, 0.f, 0.f));
+      auto  pindex2 = kernel->insert(hedge::point_t(0.f, 2.f, 0.f));
+      auto  pindex3 = kernel->insert(hedge::point_t(2.f, 2.f, 0.f));
 
       THEN("We can add the first triangle")
       {

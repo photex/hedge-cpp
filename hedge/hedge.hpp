@@ -53,7 +53,7 @@ enum class index_type_t : unsigned char
 template <index_type_t TIndexType = index_type_t::unsupported>
 struct index_t
 {
-  offset_t offset;
+  offset_t     offset;
   generation_t generation;
 
   explicit index_t() noexcept
@@ -157,20 +157,20 @@ public:
 
   virtual ~kernel_t() = default;
 
-  virtual edge_t* get(edge_index_t index)     = 0;
-  virtual face_t* get(face_index_t index)     = 0;
+  virtual edge_t*   get(edge_index_t index)   = 0;
+  virtual face_t*   get(face_index_t index)   = 0;
   virtual vertex_t* get(vertex_index_t index) = 0;
-  virtual point_t* get(point_index_t index)   = 0;
+  virtual point_t*  get(point_index_t index)  = 0;
 
-  virtual edge_index_t insert(edge_t edge)       = 0;
-  virtual face_index_t insert(face_t face)       = 0;
+  virtual edge_index_t   insert(edge_t edge)     = 0;
+  virtual face_index_t   insert(face_t face)     = 0;
   virtual vertex_index_t insert(vertex_t vertex) = 0;
-  virtual point_index_t insert(point_t point)    = 0;
+  virtual point_index_t  insert(point_t point)   = 0;
 
-  virtual edge_index_t emplace(edge_t&& edge)       = 0;
-  virtual face_index_t emplace(face_t&& face)       = 0;
+  virtual edge_index_t   emplace(edge_t&& edge)     = 0;
+  virtual face_index_t   emplace(face_t&& face)     = 0;
   virtual vertex_index_t emplace(vertex_t&& vertex) = 0;
-  virtual point_index_t emplace(point_t&& point)    = 0;
+  virtual point_index_t  emplace(point_t&& point)   = 0;
 
   virtual void remove(edge_index_t index)   = 0;
   virtual void remove(face_index_t index)   = 0;
@@ -198,9 +198,9 @@ public:
   /**
    * Connects two edges with a new vertex associated with the specified point
    */
-  vertex_index_t connect_edges(edge_index_t eindex,
+  vertex_index_t connect_edges(edge_index_t  eindex,
                                point_index_t pindex,
-                               edge_index_t next_eindex);
+                               edge_index_t  next_eindex);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -218,7 +218,7 @@ enum class element_status_t : uint16_t
 struct element_t
 {
   element_status_t status = element_status_t::active;
-  uint16_t tag            = 0;
+  uint16_t         tag    = 0;
   generation_t generation = 1; // Using 1 as default to allow indexes with gen 0
                                // to have another meaning.
 };
@@ -229,10 +229,10 @@ struct element_t
 struct edge_t : element_t
 {
   vertex_index_t vertex_index;
-  face_index_t face_index;
-  edge_index_t next_index;
-  edge_index_t prev_index;
-  edge_index_t adjacent_index;
+  face_index_t   face_index;
+  edge_index_t   next_index;
+  edge_index_t   prev_index;
+  edge_index_t   adjacent_index;
 };
 
 /**
@@ -240,9 +240,9 @@ struct edge_t : element_t
  */
 struct face_t : element_t
 {
-  edge_index_t root_edge_index;
+  edge_index_t        root_edge_index;
   edge_index_t::set_t edges;
-  normal_t normal;
+  normal_t            normal;
 };
 
 /**
@@ -251,8 +251,8 @@ struct face_t : element_t
 struct vertex_t : element_t
 {
   point_index_t point_index;
-  edge_index_t edge_index;
-  normal_t normal;
+  edge_index_t  edge_index;
+  normal_t      normal;
 };
 
 // TODO: make point attributes configurable
@@ -262,6 +262,7 @@ struct vertex_t : element_t
 struct point_t : element_t
 {
   position_t position;
+  normal_t   normal;
 
   vertex_index_t::set_t vertices;
 
@@ -283,7 +284,7 @@ class element_fn_t
 {
 protected:
   kernel_t* _kernel;
-  TIndex _index;
+  TIndex    _index;
 
 public:
   explicit element_fn_t(kernel_t* kernel, TIndex index) noexcept
@@ -337,14 +338,14 @@ public:
   using element_fn_t::element_fn_t;
 
   vertex_fn_t vertex() const;
-  face_fn_t face() const;
-  edge_fn_t next() const;
-  edge_fn_t prev() const;
-  edge_fn_t adjacent() const;
+  face_fn_t   face() const;
+  edge_fn_t   next() const;
+  edge_fn_t   prev() const;
+  edge_fn_t   adjacent() const;
 
   bool is_boundary() const;
 
-  edge_points_t points() const;
+  edge_points_t   points() const;
   edge_vertices_t vertices() const;
 
   static const edge_fn_t invalid;
@@ -359,13 +360,16 @@ public:
   using element_fn_t::element_fn_t;
 
   edge_fn_t root_edge() const;
+  // TODO: Returning a `const &` is actually bad. If this proxy is invalid there
+  //       is no way to fullfill the contract.
   edge_index_t::set_t const& edges() const;
-  float area() const;
 
   /**
    * (Re)calculates vertex normal and returns the updated value.
    */
   normal_t calculate_normal();
+  float    calculate_area() const;
+  normal_t normal() const;
 
   static const face_fn_t invalid;
 };
@@ -378,7 +382,7 @@ class vertex_fn_t : public element_fn_t<vertex_index_t, vertex_t>
 public:
   using element_fn_t::element_fn_t;
 
-  edge_fn_t edge() const;
+  edge_fn_t  edge() const;
   point_fn_t point() const;
 
   normal_t normal() const;
@@ -400,7 +404,9 @@ public:
   using element_fn_t::element_fn_t;
 
   position_t position() const;
-  normal_t normal() const;
+  normal_t   normal() const;
+  // TODO: Returning a `const &` is actually bad. If this proxy is invalid there
+  //       is no way to fullfill the contract.
   vertex_index_t::set_t const& vertices() const;
 
   /**
@@ -441,9 +447,9 @@ public:
  */
 class edge_loop_builder_t
 {
-  mesh_t& _mesh;
-  edge_index_t _root_eindex;
-  edge_index_t _last_eindex;
+  mesh_t&       _mesh;
+  edge_index_t  _root_eindex;
+  edge_index_t  _last_eindex;
   point_index_t _root_pindex;
   point_index_t _last_pindex;
 
@@ -473,17 +479,11 @@ public:
  */
 class mesh_t
 {
-  uint16_t _tag;
   kernel_t::ptr_t _kernel;
 
 public:
   mesh_t();
   explicit mesh_t(kernel_t::ptr_t&&);
-
-  uint16_t next_tag()
-  {
-    return ++_tag;
-  }
 
   kernel_t* kernel()
   {
@@ -495,11 +495,10 @@ public:
   size_t edge_count() const;
   size_t face_count() const;
 
-  edge_fn_t edge(edge_index_t index) const;
-  face_fn_t face(face_index_t index) const;
+  edge_fn_t   edge(edge_index_t index) const;
+  face_fn_t   face(face_index_t index) const;
   vertex_fn_t vertex(vertex_index_t index) const;
-
-  point_fn_t point(point_index_t pindex) const;
+  point_fn_t  point(point_index_t pindex) const;
 };
 
 } // namespace hedge
