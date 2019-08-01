@@ -5,7 +5,8 @@
 #include <memory>
 #include <unordered_set>
 
-namespace hedge {
+namespace hedge
+{
 
 struct edge_t;
 struct edge_index_t;
@@ -41,7 +42,8 @@ using generation_t = uint32_t;
    allows you to potentially re-use cells (if the kernel implements support for
    it) and can be more easily or directly validated.
  */
-enum class index_type_t : unsigned char {
+enum class index_type_t : unsigned char
+{
   vertex,
   edge,
   face,
@@ -49,49 +51,64 @@ enum class index_type_t : unsigned char {
   unsupported
 };
 template <index_type_t TIndexType = index_type_t::unsupported>
-struct index_t {
+struct index_t
+{
   offset_t offset;
   generation_t generation;
 
   explicit index_t() noexcept
     : offset(0)
-    , generation(0) {}
+    , generation(0)
+  {
+  }
 
   explicit index_t(const offset_t o) noexcept
     : offset(o)
-    , generation(0) {}
+    , generation(0)
+  {
+  }
 
   explicit index_t(const offset_t o, const generation_t g) noexcept
     : offset(o)
-    , generation(g) {}
+    , generation(g)
+  {
+  }
 
-  void reset() {
+  void reset()
+  {
     offset     = 0;
     generation = 0;
   }
 
-  bool operator!=(const index_t& other) const {
+  bool operator!=(const index_t& other) const
+  {
     return !(*this == other);
   }
-  bool operator==(const index_t& other) const {
+  bool operator==(const index_t& other) const
+  {
     return offset == other.offset && generation == other.generation;
   }
 
-  friend bool operator<(const index_t& lhs, const index_t& rhs) {
+  friend bool operator<(const index_t& lhs, const index_t& rhs)
+  {
     return lhs.offset < rhs.offset;
   }
-  friend bool operator>(const index_t& lhs, const index_t& rhs) {
+  friend bool operator>(const index_t& lhs, const index_t& rhs)
+  {
     return rhs < lhs;
   }
 
-  explicit operator bool() const noexcept {
+  explicit operator bool() const noexcept
+  {
     return offset > 0;
   }
 };
 
 template <typename TIndex>
-struct index_hasher_t {
-  std::size_t operator()(TIndex const& index) const {
+struct index_hasher_t
+{
+  std::size_t operator()(TIndex const& index) const
+  {
     std::size_t h1 = std::hash<offset_t>{}(index.offset);
     std::size_t h2 = std::hash<generation_t>{}(index.generation);
     return h1 ^ (h2 << 1);
@@ -101,23 +118,30 @@ struct index_hasher_t {
 // Discriminated types to assist in API design and reduce the potential for
 // errors that can arise from using generic index types like plain integers and
 // so on.
-struct edge_index_t : index_t<index_type_t::edge> {
+struct edge_index_t : index_t<index_type_t::edge>
+{
   using index_t::index_t;
   static edge_index_t const invalid;
   using hasher_t = index_hasher_t<edge_index_t>;
   using set_t    = std::unordered_set<edge_index_t, hasher_t>;
 };
-struct face_index_t : index_t<index_type_t::face> {
+
+struct face_index_t : index_t<index_type_t::face>
+{
   using index_t::index_t;
   static face_index_t const invalid;
 };
-struct vertex_index_t : index_t<index_type_t::vertex> {
+
+struct vertex_index_t : index_t<index_type_t::vertex>
+{
   using index_t::index_t;
   static vertex_index_t const invalid;
   using hasher_t = index_hasher_t<vertex_index_t>;
   using set_t    = std::unordered_set<vertex_index_t, hasher_t>;
 };
-struct point_index_t : index_t<index_type_t::point> {
+
+struct point_index_t : index_t<index_type_t::point>
+{
   using index_t::index_t;
   static point_index_t const invalid;
 };
@@ -164,25 +188,34 @@ public:
    * Create an empty edge and it's adjacent edge.
    */
   edge_index_t make_edge_pair();
+
   /**
-   * Given the root edge index of a connected edge loop, create a new associated face
+   * Given the root edge index of a connected edge loop, create a new associated
+   * face
    */
   face_index_t make_face(edge_index_t root_eindex);
+
   /**
    * Connects two edges with a new vertex associated with the specified point
    */
-  vertex_index_t connect_edges(edge_index_t out_eindex, point_index_t pindex, edge_index_t in_eindex);
+  vertex_index_t connect_edges(edge_index_t out_eindex, point_index_t pindex,
+                               edge_index_t in_eindex);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 // Our principle element structures.
 
-enum class element_status_t : uint16_t { active = 0x0000, inactive = 0x8000 };
+enum class element_status_t : uint16_t
+{
+  active   = 0x0000,
+  inactive = 0x8000
+};
 
 /**
  * TODO: docs
  */
-struct element_t {
+struct element_t
+{
   element_status_t status = element_status_t::active;
   uint16_t tag            = 0;
   generation_t generation = 1; // Using 1 as default to allow indexes with gen 0
@@ -192,7 +225,8 @@ struct element_t {
 /**
  * TODO: docs
  */
-struct edge_t : element_t {
+struct edge_t : element_t
+{
   vertex_index_t vertex_index;
   face_index_t face_index;
   edge_index_t next_index;
@@ -203,15 +237,18 @@ struct edge_t : element_t {
 /**
  * TODO: docs
  */
-struct face_t : element_t {
+struct face_t : element_t
+{
   edge_index_t root_edge_index;
   edge_index_t::set_t edges;
+  normal_t normal;
 };
 
 /**
  * TODO: docs
  */
-struct vertex_t : element_t {
+struct vertex_t : element_t
+{
   point_index_t point_index;
   edge_index_t edge_index;
   normal_t normal;
@@ -221,7 +258,8 @@ struct vertex_t : element_t {
 /**
  * TODO: docs
  */
-struct point_t : element_t {
+struct point_t : element_t
+{
   position_t position;
 
   vertex_index_t::set_t vertices;
@@ -249,35 +287,44 @@ protected:
 public:
   explicit element_fn_t(kernel_t* kernel, TIndex index) noexcept
     : _kernel(kernel)
-    , _index(index) {}
+    , _index(index)
+  {
+  }
 
-  explicit operator bool() const noexcept {
+  explicit operator bool() const noexcept
+  {
     return _kernel != nullptr && (bool)_index && element() != nullptr;
   }
 
-  bool operator==(element_fn_t const& other) const {
+  bool operator==(element_fn_t const& other) const
+  {
     return _index == other._index;
   }
 
-  bool operator!=(element_fn_t const& other) const {
+  bool operator!=(element_fn_t const& other) const
+  {
     return _index != other._index;
   }
 
-  TElement* element() const {
-    if (_kernel != nullptr) {
+  TElement* element() const
+  {
+    if (_kernel != nullptr)
+    {
       return _kernel->get(_index);
     }
-    else {
+    else
+    {
       return nullptr;
     }
   }
 
-  TIndex index() {
+  TIndex index()
+  {
     return _index;
   }
 };
 
-using edge_points_t = std::array<point_fn_t, 2>;
+using edge_points_t   = std::array<point_fn_t, 2>;
 using edge_vertices_t = std::array<vertex_fn_t, 2>;
 
 /**
@@ -314,6 +361,11 @@ public:
   edge_index_t::set_t const& edges() const;
   float area() const;
 
+  /**
+   * (Re)calculates vertex normal and returns the updated value.
+   */
+  normal_t calculate_normal();
+
   static const face_fn_t invalid;
 };
 
@@ -330,7 +382,10 @@ public:
 
   normal_t normal() const;
 
-  void calculate_normal();
+  /**
+   * (Re)calculates vertex normal and returns the updated value.
+   */
+  normal_t calculate_normal();
 
   static const vertex_fn_t invalid;
 };
@@ -347,7 +402,10 @@ public:
   normal_t normal() const;
   vertex_index_t::set_t const& vertices() const;
 
-  void calculate_normal();
+  /**
+   * (Re)calculates vertex normal and returns the updated value.
+   */
+  normal_t calculate_normal();
 
   static const point_fn_t invalid;
 };
@@ -420,11 +478,13 @@ public:
   mesh_t();
   explicit mesh_t(kernel_t::ptr_t&&);
 
-  uint16_t next_tag() {
+  uint16_t next_tag()
+  {
     return ++_tag;
   }
 
-  kernel_t* kernel() {
+  kernel_t* kernel()
+  {
     return _kernel.get();
   }
 
