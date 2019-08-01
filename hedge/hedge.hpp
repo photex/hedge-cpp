@@ -198,8 +198,9 @@ public:
   /**
    * Connects two edges with a new vertex associated with the specified point
    */
-  vertex_index_t connect_edges(edge_index_t out_eindex, point_index_t pindex,
-                               edge_index_t in_eindex);
+  vertex_index_t connect_edges(edge_index_t eindex,
+                               point_index_t pindex,
+                               edge_index_t next_eindex);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -424,7 +425,8 @@ public:
   explicit mesh_builder_t(mesh_t& mesh);
 
   face_index_t add_triangle(point_t p0, point_t p1, point_t p2);
-  face_index_t add_triangle(point_index_t pindex0, point_index_t pindex1,
+  face_index_t add_triangle(point_index_t pindex0,
+                            point_index_t pindex1,
                             point_index_t pindex2);
   face_index_t add_triangle(edge_index_t eindex, point_t p0);
   face_index_t add_triangle(edge_index_t eindex, point_index_t pindex);

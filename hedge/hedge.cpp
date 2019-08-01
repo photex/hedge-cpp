@@ -35,9 +35,8 @@ class element_vector_t
 {
 public:
   using collection_t = std::vector<TElement>;
-  using free_cells_t =
-    std::priority_queue<TElementIndex, std::vector<TElementIndex>,
-                        std::greater<>>;
+  using free_cells_t = std::
+    priority_queue<TElementIndex, std::vector<TElementIndex>, std::greater<>>;
 
   element_vector_t()
   {
@@ -780,8 +779,8 @@ float face_fn_t::area() const
   auto v2   = v1.edge().next().vertex();
   while (v2 != v0)
   {
-    area += calc_area(v0.point().element(), v1.point().element(),
-                      v2.point().element());
+    area += calc_area(
+      v0.point().element(), v1.point().element(), v2.point().element());
     v1 = v2;
     v2 = v1.edge().next().vertex();
   }
